@@ -89,3 +89,4 @@ body:has(#entry-dialog[open]){overflow:hidden}
 .member-buttons button:nth-child(1) .member-avatar{background:#e6d5ba;color:#53432d}
 .member-buttons button:nth-child(2) .member-avatar{background:#d6f283;color:#173b36}
 .member-buttons button:nth-child(3) .member-avatar{background:#bbdbed;color:#254355}
+html,body{touch-action:pan-x pan-y}
