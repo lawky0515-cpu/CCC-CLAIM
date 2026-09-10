@@ -7,6 +7,14 @@ const STORAGE_KEY = 'company-claims-v1';
 const $ = id => document.getElementById(id);
 let attachments = [], readingFiles = false, previewUrl = null;
 let records = [], editingId = null, deletingId = null, storageReady = false;
+try{
+ const params=new URLSearchParams(location.search);
+ if(params.get('clear-local')==='1'){
+  localStorage.removeItem(STORAGE_KEY);
+  params.delete('clear-local');
+  history.replaceState(null,'',location.pathname+(params.toString()?'?'+params:'')+location.hash);
+ }
+}catch{}
 const money = cents => (cents / 100).toLocaleString('en-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 function notify(text, error = false) { $('message').textContent = text; $('message').classList.toggle('error', error); }
 function validRecord(r) { return r && typeof r.id === 'string' && typeof r.name === 'string' && Number.isSafeInteger(r.amount) && r.amount > 0 && typeof r.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(r.date) && STATUSES.includes(r.status) && (r.member == null || r.member === '' || MEMBERS.includes(r.member)) && (!r.evidence || (Array.isArray(r.evidence) && r.evidence.every(validEvidence))); }
