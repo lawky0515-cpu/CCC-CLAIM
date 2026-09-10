@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="description" content="公司 Claim 金额、日期与状态记录"><title>公司 Claim 记录</title><link rel="stylesheet" href="style.css?v=20260910-3"><script src="app.js?v=20260910-3" defer></script></head>
+<body>
+<section id="login-screen" class="login-screen">
+<div class="login-top"><div class="brand"><span class="logo">C</span> CLAIM <span class="brand-sub">/ 公司账目</span></div><span class="login-top-note">YOUR TEAM. EVERY CLAIM.</span></div>
+<div class="login-card"><p class="eyebrow">WELCOME</p><div class="member-buttons">
+<button type="button" data-member="BOSS K"><span class="member-avatar">K</span><span class="member-copy"><strong>I'm Boss K</strong><span>进入 Claim 记录</span></span></button>
+<button type="button" data-member="BOSS L"><span class="member-avatar">L</span><span class="member-copy"><strong>I'm Boss L</strong><span>进入 Claim 记录</span></span></button>
+<button type="button" data-member="BOSS W"><span class="member-avatar">W</span><span class="member-copy"><strong>I'm Boss W</strong><span>进入 Claim 记录</span></span></button>
+</div><p class="login-detail">查看全部记录 <span>·</span> 新增 Claim 自动归属你</p></div>
+<div class="login-bottom"><span>CLAIM LEDGER</span><span>本机身份选择 · 无账号验证</span></div>
+</section>
+<div id="app-screen" hidden>
+<header><div class="brand"><span class="logo">C</span> CLAIM <span class="brand-sub">/ 公司账目</span></div><div class="session-bar"><strong id="current-member"></strong><button id="sign-out" type="button">切换成员</button></div></header>
+<main>
+<div class="heading"><div><p class="eyebrow">EXPENSE MANAGEMENT</p><h1>Claim 记录</h1><p class="muted">每一笔支出，清楚记录。</p></div><span class="currency">金额单位 <strong>MYR · RM</strong></span></div>
+<section class="stats" aria-label="所选成员金额汇总"><article class="primary"><p>累计 Claim <span>↗</span></p><h2><small>RM</small> <span id="total">0.00</span></h2><div id="count">0 笔记录</div></article><article><p>未支付金额 <span>◷</span></p><h2><small>RM</small> <span id="pending">0.00</span></h2><div>尚未支付</div></article><article><p>已支付金额 <span>✓</span></p><h2><small>RM</small> <span id="paid">0.00</span></h2><div>已完成支付</div></article></section>
+<p id="summary-scope" class="summary-scope">汇总范围：全部成员</p><div class="cloud-tools"><button id="sync-cloud" type="button">刷新云端记录</button><p id="cloud-message" role="status">记录写入 Google Sheets 后，网站会重新读取云端数据。</p></div><div class="workspace"><section class="ledger"><div class="section-head"><h2>所有记录 <span id="visible-count">0</span></h2><div class="filters"><select id="member-filter" aria-label="筛选成员"><option value="">全部成员</option><option>BOSS L</option><option>BOSS W</option><option>BOSS K</option><option value="unassigned">未指定成员</option></select><select id="filter" aria-label="筛选状态"><option value="">全部状态</option><option>未支付</option><option>已支付</option></select></div></div><div class="table-scroll"><table><thead><tr><th>项目 / 说明</th><th>成员</th><th>日期</th><th class="numeric">金额 (RM)</th><th>Status</th><th>Evidence</th><th>操作</th></tr></thead><tbody id="records"></tbody></table></div><div id="empty" class="empty"><span>▤</span><h3>开始记录第一笔 Claim</h3><p>在新增记录中填写金额、日期和状态。</p></div><div class="table-footer"><span>当前记录合计</span><strong id="subtotal">RM 0.00</strong></div></section>
+<aside class="entry"><h2 id="form-title">＋ 新增记录</h2><form id="claim-form"><p id="record-owner" class="record-owner"></p><label for="name">项目 / 说明</label><input id="name" maxlength="120" required placeholder="例如：客户拜访交通费"><label for="amount">金额 (RM)</label><input id="amount" type="number" inputmode="decimal" min="0.01" max="999999999.99" step="0.01" required placeholder="0.00"><label for="date">日期</label><input id="date" type="date" required><label for="status">Status</label><select id="status"><option>未支付</option><option>已支付</option></select><label for="evidence">Evidence / 凭证</label><input id="evidence" type="file" accept="image/jpeg,image/png,image/webp,application/pdf" multiple aria-describedby="upload-help"><p id="upload-help" class="upload-help">支持 JPG、PNG、WebP、PDF，每笔最多 3 个文件，共 2 MB。保存记录时会自动上传到 Google Drive；本地服务也会保留电脑副本。</p><ul id="attachments" class="attachments"></ul><button class="save" id="save" type="submit">添加记录 ＋</button><button class="cancel" id="cancel" type="button" hidden>取消编辑</button></form><p id="message" role="status" aria-live="polite"></p><p class="storage-note">记录自动同步到 Google Sheets，并在当前浏览器保留副本。</p></aside></div><footer><span>CLAIM LEDGER</span>公司报销记录</footer>
+</main>
+<dialog id="delete-dialog"><h2>删除这笔记录？</h2><p>删除后无法恢复。</p><div class="dialog-actions"><button id="keep">取消</button><button id="confirm-delete" class="danger">删除记录</button></div></dialog>
+<dialog id="evidence-dialog"><div class="section-head"><h2 id="evidence-title">凭证</h2><button id="close-evidence" type="button">关闭</button></div><div id="evidence-preview"></div><a id="download-evidence">下载凭证</a></dialog>
+</div></body></html>
+
+
+
