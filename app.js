@@ -1,4 +1,5 @@
 'use strict';
+for(const eventName of ['gesturestart','gesturechange','gestureend'])document.addEventListener(eventName,event=>event.preventDefault(),{passive:false});
 const MEMBERS = ['BOSS L', 'BOSS W', 'BOSS K'];
 const STATUSES = ['未支付', '已支付'];
 function migrateStatuses(data) { return Array.isArray(data) ? data.map(r => { if (!r) return r; let record = r; if (['待审核','已批准','已拒绝'].includes(record.status)) record = {...record,status:'未支付'}; if (record.member === 'BOOS L') record = {...record,member:'BOSS L'}; return record; }) : data; }
@@ -29,7 +30,7 @@ function render() {
   $('total').textContent = money(sum(memberRecords)); $('pending').textContent = money(sum(memberRecords.filter(r=>r.status===STATUSES[0]))); $('paid').textContent = money(sum(memberRecords.filter(r=>r.status===STATUSES[1]))); $('count').textContent = `${memberRecords.length} 笔记录`;
   const visible = memberRecords.filter(r=>!$('filter').value || r.status===$('filter').value).sort((a,b)=>b.date.localeCompare(a.date));
   $('visible-count').textContent = visible.length; $('subtotal').textContent = `RM ${money(sum(visible))}`;
-  $('records').replaceChildren();
+  const rows=document.createDocumentFragment();
   for (const r of visible) {
     const tr = document.createElement('tr');
     [r.name,r.member||'未指定成员',r.date,money(r.amount)].forEach((text,i)=>{const td=document.createElement('td');td.textContent=text;if(i===3)td.className='numeric';tr.append(td);});
@@ -37,19 +38,41 @@ function render() {
     const evidenceCell=document.createElement('td'); evidenceCell.className='evidence-cell'; for(const file of r.evidence||[]) {const b=document.createElement('button');b.type='button';b.className='row-action';b.textContent=file.name;b.addEventListener('click',()=>showEvidence(file));evidenceCell.append(b);} if(!r.evidence?.length)evidenceCell.textContent='—';tr.append(evidenceCell);
     const actions=document.createElement('td');
     for (const [label,action] of [['编辑',()=>edit(r)],['删除',()=>{deletingId=r.id;$('delete-dialog').showModal();}]]) { const b=document.createElement('button');b.type='button';b.textContent=label;b.className='row-action'+(label==='删除'?' delete':'');b.setAttribute('aria-label',`${label} ${r.name}`);b.addEventListener('click',action);actions.append(b); }
-    tr.append(actions);$('records').append(tr);
+    tr.append(actions);rows.append(tr);
   }
+  $('records').replaceChildren(rows);
   $('empty').hidden=visible.length>0;
   $('empty').querySelector('h3').textContent=records.length?'没有符合条件的记录':'开始记录第一笔 Claim';
   $('empty').querySelector('p').textContent=records.length?'选择其他成员或状态查看记录。':'在新增记录中填写金额、日期和状态。';
 }
 function edit(r) { if(readingFiles)return; attachments=[...(r.evidence||[])];renderAttachments();$('evidence').value='';editingId=r.id;$('record-owner').textContent='记录成员：'+(r.member||'未指定成员');$('name').value=r.name;$('amount').value=(r.amount/100).toFixed(2);$('date').value=r.date;$('status').value=r.status;$('form-title').textContent='编辑记录';$('save').textContent='保存修改';$('cancel').hidden=false;notify('');$('entry-dialog').showModal();$('name').focus(); }
-$('claim-form').addEventListener('submit',async e=>{e.preventDefault();if(!storageReady||readingFiles)return;if(!MEMBERS.includes(currentMember)){notify('请选择成员。',true);return;}const name=$('name').value.trim(),raw=$('amount').value;if(!name||!/^\d+(\.\d{1,2})?$/.test(raw)){notify('请输入项目名称及最多两位小数的金额。',true);return;}const amount=Math.round(Number(raw)*100);if(!Number.isSafeInteger(amount)||amount<=0||amount>99999999999){notify('请输入有效金额。',true);return;}const wasEditing=!!editingId;const record={id:editingId||(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`),name,amount,member:editingId?(records.find(r=>r.id===editingId)?.member||currentMember):currentMember,date:$('date').value,status:$('status').value,evidence:[...attachments],syncPending:true};const next=wasEditing?records.map(r=>r.id===editingId?record:r):[record,...records];if(!persist(next))return;resetForm();notify('本机已保存，正在写入 Google Sheets…');$('save').disabled=true;try{const synced=await syncOneRecord(record);persist(records.map(r=>r.id===record.id?synced:r));await refreshCloudRecords(true);$('cloud-message').textContent=wasEditing?'已写入 Google Sheets，并重新读取全部记录。':'已写入 Google Sheets，并重新读取全部记录。';$('entry-dialog').close();}catch(error){$('cloud-message').textContent='本机记录已保存，但云端同步失败：'+error.message+' 可点击刷新云端记录重试。';$('entry-dialog').close();}finally{$('save').disabled=!storageReady;}});
+$('claim-form').addEventListener('submit',async e=>{
+ e.preventDefault();if(!storageReady||readingFiles)return;
+ if(!MEMBERS.includes(currentMember)){notify('请选择成员。',true);return;}
+ const name=$('name').value.trim(),raw=$('amount').value;
+ if(!name||!/^\d+(\.\d{1,2})?$/.test(raw)){notify('请输入项目名称及最多两位小数的金额。',true);return;}
+ const amount=Math.round(Number(raw)*100);
+ if(!Number.isSafeInteger(amount)||amount<=0||amount>99999999999){notify('请输入有效金额。',true);return;}
+ const wasEditing=!!editingId;
+ const previous=wasEditing?records.find(r=>r.id===editingId):null;
+ const record={id:editingId||(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random().toString(36).slice(2)}`),name,amount,member:previous?.member||currentMember,date:$('date').value,status:$('status').value,evidence:[...attachments],syncPending:true};
+ const next=wasEditing?records.map(r=>r.id===editingId?record:r):[record,...records];
+ if(!persist(next))return;
+ resetForm();notify('本机已保存，正在写入 Google Sheets…');$('save').disabled=true;
+ try{
+  const result=await syncOneRecord(record,previous?records:[],true);
+  persist(result.records);
+  lastCloudRefresh=Date.now();
+  $('cloud-message').textContent='已写入并从 Google Sheets 返回全部记录。';
+  $('entry-dialog').close();
+ }catch(error){$('cloud-message').textContent='本机记录已保存，但云端同步失败：'+error.message+' 可点击刷新云端记录重试。';$('entry-dialog').close();}
+ finally{$('save').disabled=!storageReady;}
+});
 $('cancel').addEventListener('click',()=>{resetForm();notify('');$('entry-dialog').close();});
 $('filter').addEventListener('change',render);
 $('member-filter').addEventListener('change',render);
 $('keep').addEventListener('click',()=>$('delete-dialog').close());
-$('confirm-delete').addEventListener('click',async()=>{if(!deletingId)return;const id=deletingId;$('confirm-delete').disabled=true;notify('正在从 Google Sheets 删除…');try{const remote=await claimCloudList();const existing=remote.find(r=>r.id===id);if(existing)await claimCloudRequest({action:'delete',id,updatedAt:existing.updatedAt});if(persist(records.filter(r=>r.id!==id))){if(editingId===id)resetForm();notify('记录已删除并自动同步。');$('delete-dialog').close();deletingId=null;}}catch(error){notify('删除未完成：'+error.message+' 本机记录仍保留。',true);$('delete-dialog').close();}finally{$('confirm-delete').disabled=false;}});
+$('confirm-delete').addEventListener('click',async()=>{if(!deletingId)return;const id=deletingId;$('confirm-delete').disabled=true;notify('正在从 Google Sheets 删除…');try{let existing=records.find(r=>r.id===id),latest;if(existing&&!existing.updatedAt)existing=(await claimCloudList()).find(r=>r.id===id);if(existing){const result=await claimCloudRequest({action:'delete',id,updatedAt:existing.updatedAt});latest=result.records;}else latest=records.filter(r=>r.id!==id);if(persist(latest)){lastCloudRefresh=Date.now();if(editingId===id)resetForm();notify('记录已删除并自动同步。');$('delete-dialog').close();deletingId=null;}}catch(error){notify('删除未完成：'+error.message+' 本机记录仍保留。',true);$('delete-dialog').close();}finally{$('confirm-delete').disabled=false;}});
 window.addEventListener('storage',e=>{if(e.key===STORAGE_KEY){try{const data=migrateStatuses(JSON.parse(e.newValue||'[]'));if(!Array.isArray(data)||!data.every(validRecord))throw Error();records=data;render();resetForm();notify('记录已从另一个标签页更新。');}catch{storageReady=false;$('save').disabled=true;notify('存储数据异常，请刷新页面检查。',true);}}});
 initEntryDialog();
 initEvidence();
@@ -110,7 +133,8 @@ $('sign-out').addEventListener('click',()=>{
  resetForm();$('app-screen').hidden=true;$('login-screen').hidden=false;
 });
 const CLAIM_ENDPOINT='https://script.google.com/macros/s/AKfycbxL-iCm5HeoLZTxowrNmo1rD9z2letwmyIrxcIrMOdbKzs85c1bJC7fNyIamu7qlczs/exec';
-let cloudRefreshPromise=null;
+const CLAIM_SHEET_ID='1nL7PSsnCPzy2WHPO2s7BSVguF0ap4KRc9eGQRpsP6uI';
+let cloudRefreshPromise=null,lastCloudRefresh=0;
 async function claimCloudRequest(body){
  const response=await fetch(CLAIM_ENDPOINT,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body),redirect:'follow'});
  if(!response.ok)throw Error('接口请求失败：'+response.status);
@@ -121,17 +145,37 @@ function claimCloudListJsonp(){
  return new Promise((resolve,reject)=>{
   const callback='claimCloudCallback_'+Date.now()+'_'+Math.random().toString(36).slice(2);
   const script=document.createElement('script');
-  const cleanup=()=>{clearTimeout(timer);script.remove();try{delete window[callback];}catch{window[callback]=undefined;}};
-  const timer=setTimeout(()=>{cleanup();reject(Error('JSONP 读取超时。'));},15000);
+  const cleanup=(allowLate=false)=>{clearTimeout(timer);script.remove();if(allowLate){window[callback]=()=>{};setTimeout(()=>{try{delete window[callback];}catch{window[callback]=undefined;}},60000);}else try{delete window[callback];}catch{window[callback]=undefined;}};
+  const timer=setTimeout(()=>{cleanup(true);reject(Error('JSONP 读取超时。'));},8000);
   window[callback]=result=>{cleanup();if(result&&result.ok&&Array.isArray(result.records))resolve(result.records);else reject(Error(result?.error||'JSONP 返回异常。'));};
   script.onerror=()=>{cleanup();reject(Error('JSONP 被浏览器拦截。'));};
   script.src=CLAIM_ENDPOINT+'?action=list&callback='+encodeURIComponent(callback)+'&t='+Date.now();
   document.head.append(script);
  });
 }
-async function claimCloudList(){
- let getError;
- try{
+function claimSheetListJsonp(){
+ return new Promise((resolve,reject)=>{
+  const callback='claimSheetCallback_'+Date.now()+'_'+Math.random().toString(36).slice(2);
+  const script=document.createElement('script');
+  const cleanup=(allowLate=false)=>{clearTimeout(timer);script.remove();if(allowLate){window[callback]=()=>{};setTimeout(()=>{try{delete window[callback];}catch{window[callback]=undefined;}},60000);}else try{delete window[callback];}catch{window[callback]=undefined;}};
+  const timer=setTimeout(()=>{cleanup(true);reject(Error('Sheet 读取超时。'));},8000);
+  const value=(cells,index)=>cells[index]?.v??'';
+  const dateValue=value=>{const text=String(value);const match=text.match(/^Date\((\d+),(\d+),(\d+)\)$/);return match?`${match[1]}-${String(Number(match[2])+1).padStart(2,'0')}-${String(match[3]).padStart(2,'0')}`:text;};
+  window[callback]=result=>{
+   try{
+    if(!result||result.status!=='ok'||!Array.isArray(result.table?.rows))throw Error('Sheet 返回异常。');
+    const cloud=result.table.rows.map(row=>{const cells=row.c||[];let evidence=[];try{evidence=JSON.parse(String(value(cells,8)||'[]'));}catch{}return {id:String(value(cells,0)),member:String(value(cells,1)),name:String(value(cells,2)),amount:Math.round(Number(value(cells,3))*100),date:dateValue(value(cells,4)),status:String(value(cells,5)),updatedAt:String(value(cells,7)),evidence};}).filter(record=>record.id);
+    cleanup();resolve(cloud);
+   }catch(error){cleanup();reject(error);}
+  };
+  script.onerror=()=>{cleanup();reject(Error('Sheet 接口被浏览器拦截。'));};
+  const tqx=encodeURIComponent('out:json;responseHandler:'+callback);
+  script.src='https://docs.google.com/spreadsheets/d/'+CLAIM_SHEET_ID+'/gviz/tq?sheet=Claims&tqx='+tqx+'&t='+Date.now();
+  document.head.append(script);
+ });
+}
+function claimCloudListGet(){
+ return (async()=>{
   const url=CLAIM_ENDPOINT+'?action=list&t='+Date.now();
   const response=await Promise.race([
    fetch(url,{method:'GET',cache:'no-store',redirect:'follow'}),
@@ -142,17 +186,25 @@ async function claimCloudList(){
   if(result.ok&&Array.isArray(result.records))return result.records;
   if(result.error)throw Error(result.error);
   throw Error('云端读取接口尚未更新。');
- }catch(error){getError=error;}
- try{return await claimCloudListJsonp();}
- catch(jsonpError){
-  try{return (await claimCloudRequest({action:'list'})).records;}
-  catch(postError){throw Error('GET：'+getError.message+'；JSONP：'+jsonpError.message+'；POST：'+postError.message);}
- }
+ })();
+}
+function firstSuccessful(attempts){
+ return new Promise((resolve,reject)=>{
+  const errors=[];let remaining=attempts.length,settled=false;
+  attempts.forEach(({name,promise})=>promise.then(value=>{if(!settled){settled=true;resolve(value);}},error=>{errors.push(name+'：'+error.message);remaining--;if(!remaining&&!settled)reject(Error(errors.join('；')));}));
+ });
+}
+async function claimCloudList(){
+ let parallelError;
+ try{return await firstSuccessful([{name:'Sheet',promise:claimSheetListJsonp()},{name:'GET',promise:claimCloudListGet()},{name:'JSONP',promise:claimCloudListJsonp()}]);}
+ catch(error){parallelError=error;}
+ try{return (await claimCloudRequest({action:'list'})).records;}
+ catch(postError){throw Error(parallelError.message+'；POST：'+postError.message);}
 }
 function sameClaim(a,b){return ['name','member','amount','date','status'].every(key=>a[key]===b[key]);}
 function sameEvidenceList(a,b){const left=a.evidence||[],right=b.evidence||[];return left.length===right.length&&left.every((file,index)=>file.name===right[index]?.name&&file.size===right[index]?.size);}
-async function syncOneRecord(record){
- const remote=await claimCloudList();
+async function syncOneRecord(record,knownRemote=null,includeRecords=false){
+ const remote=knownRemote===null?await claimCloudList():knownRemote;
  const existing=remote.find(item=>item.id===record.id);
  const used=new Set();
  const evidence=(record.evidence||[]).map(file=>{
@@ -161,11 +213,11 @@ async function syncOneRecord(record){
   if(match){used.add(match.id);return {id:match.id};}
   return file;
  });
- if(existing&&sameClaim(existing,record)&&evidence.length===(existing.evidence||[]).length&&evidence.every(item=>item.id))return existing;
+ if(existing&&sameClaim(existing,record)&&evidence.length===(existing.evidence||[]).length&&evidence.every(item=>item.id))return includeRecords?{synced:existing,records:remote}:existing;
  const result=await claimCloudRequest({action:'save',record:{...record,evidence},updatedAt:existing?.updatedAt});
  const synced=result.records.find(item=>item.id===record.id);
  if(!synced||!sameClaim(synced,record))throw Error('云端核对失败。');
- return synced;
+ return includeRecords?{synced,records:result.records}:synced;
 }
 async function synchronizeAll(){
  const local=migrateStatuses(JSON.parse(localStorage.getItem(STORAGE_KEY)||'[]'));
@@ -183,6 +235,8 @@ async function synchronizeAll(){
 }
 async function refreshCloudRecords(quiet=false){
  if(cloudRefreshPromise)return cloudRefreshPromise;
+ if(quiet&&Date.now()-lastCloudRefresh<15000)return records;
+ lastCloudRefresh=Date.now();
  const message=$('cloud-message');
  if(!quiet)message.textContent='正在读取 Google Sheets…';
  cloudRefreshPromise=(async()=>{
@@ -197,7 +251,7 @@ async function refreshCloudRecords(quiet=false){
     for(const record of pending){
      const duplicate=remote.some(item=>sameClaim(item,record)&&sameEvidenceList(item,record));
      if(duplicate)continue;
-     try{await syncOneRecord(record);uploaded=true;}catch{failed.push(record);}
+      try{await syncOneRecord(record,remote);uploaded=true;}catch{failed.push(record);}
     }
    if(uploaded){
     try{remote=migrateStatuses(await claimCloudList());}catch{}
